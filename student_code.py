@@ -116,7 +116,8 @@ class KnowledgeBase(object):
             print("Invalid ask:", fact.statement)
             return []
 
-    def kb_retract(self, fact):
+   
+    def retract_helper(self, fact_rule):
         """Retract a fact from the KB
 
         Args:
@@ -125,10 +126,78 @@ class KnowledgeBase(object):
         Returns:
             None
         """
-        printv("Retracting {!r}", 0, verbose, [fact])
+        printv("Retracting {!r}", 0, verbose, [fact_rule])
         ####################################################
         # Student code goes here
         
+        # TODO: Check if it's a rule or a fact
+        isFact = isinstance(fact_rule, Fact)
+
+        # TODO: If fact - check if it's in the kb. then check if it's supported by anything.
+        if isFact:
+            fact = self._get_fact(fact_rule)
+            if fact:
+                if len(fact.supported_by) == 0:
+                    if fact.supports_facts:
+                        for f in fact.supports_facts:
+                            ## for each fact it supports, remove it from their supported list
+                            if f.supported_by:
+                                for fs in f.supported_by:
+                                    if (fs[0] == fact):
+                                        f.supported_by.remove(fs)
+                                ## if it was the only fact that supported it, retract that fact too
+                            if len(f.supported_by) == 0: 
+                                self.retract_helper(f)
+                        
+                    ## pretty much the same thing for rules
+                    if fact.supports_rules:
+                        for r in fact.supports_rules:
+                            if r.supported_by:
+                                for rs in r.supported_by:
+                                    if (rs[0] == fact):
+                                        r.supported_by.remove(rs)
+                            if (len(r.supported_by) == 0 and (not r.asserted)):
+                                self.retract_helper(r)
+                    # then remove fact
+                    self.facts.remove(fact)
+
+
+        # TODO: If rule -
+        ## if it isnt asserted and nothing supportes it
+        ## for each fact that rule supports, check that facts supported by and delete the fact we're retracting
+        ## if it was the only one, retract the iterating fact
+        ## same thing for rules
+        ## remove rule
+
+        else:
+            rule = self._get_rule(fact_rule)
+            if len(rule.supported_by) == 0:
+                if rule.supports_facts:
+                    for f in rule.supports_facts:
+                        ## for each fact it supports, remove it from their supported list
+                        if f.supported_by:
+                            for fs in f.supported_by:
+                                if (fs[1] == rule):
+                                    f.supported_by.remove(fs)
+                        ## if it was the only fact that supported it, retract that fact too
+                        if len(f.supported_by) == 0:
+                            self.retract_helper(f)
+                    
+                ## pretty much the same thing for rules
+                if rule.supports_rules:
+                    for r in rule.supports_rules:
+                        if r.supported_by:
+                            for rs in r.supported_by:
+                                if (rs[1] == rule):
+                                    r.supported_by.remove(rs)
+                        if (len(r.supported_by) == 0 and (not r.asserted)):
+                            self.retract_helper(r)
+                # then remove fact
+                self.rules.remove(rule)
+
+    def kb_retract(self, fact):
+        if isinstance(fact, Fact):
+            self.retract_helper(fact)      
 
 class InferenceEngine(object):
     def fc_infer(self, fact, rule, kb):
@@ -144,5 +213,29 @@ class InferenceEngine(object):
         """
         printv('Attempting to infer from {!r} and {!r} => {!r}', 1, verbose,
             [fact.statement, rule.lhs, rule.rhs])
+
+        first_statement = rule.lhs[0]
+        bindings = match(fact.statement, first_statement)
+        if (bindings):
+            if (len(rule.lhs) == 1):
+                statement = instantiate(rule.rhs, bindings)
+                fr = Fact(statement, [[fact, rule]])
+                fact.supports_facts.append(fr)
+                rule.supports_facts.append(fr)
+                kb.kb_assert(fr)
+            else:
+                rules = []
+                for statement in rule.lhs[1:]:
+                    rules.append(instantiate(statement, bindings))
+                fr = Rule([rules, instantiate(rule.rhs, bindings)], [[fact, rule]])
+                fact.supports_rules.append(fr)
+                rule.supports_rules.append(fr)
+                kb.kb_assert(fr)
+
         ####################################################
         # Student code goes here
+
+    
+
+        
+
